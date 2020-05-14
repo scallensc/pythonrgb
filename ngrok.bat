@@ -1,0 +1,1 @@
+ngrok http -subdomain=twitchhooks 5000
