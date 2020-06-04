@@ -13,8 +13,8 @@ opfade_pat = CustomMode(
     mode=MODE_GRADUALLY,
     speed=0.5,
     colors=[
-        (255, 35, 0),
-        (255, 0, 255)
+        (255, 0, 255),
+        (255, 35, 0)
     ]
 )
 
