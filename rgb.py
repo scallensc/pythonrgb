@@ -2,6 +2,9 @@ import sys
 import time
 import argparse
 import magichue
+import sys
+import socket
+import json
 from magichue import discover_bulbs
 
 from magichue import (
@@ -9,148 +12,190 @@ from magichue import (
     MODE_GRADUALLY,
 )
 
-opfade_pat = CustomMode(
-    mode=MODE_GRADUALLY,
-    speed=0.5,
-    colors=[
-        (255, 0, 255),
-        (255, 35, 0)
-    ]
-)
+light = magichue.Light('10.0.0.24')
+ip = '10.0.0.24'
 
-gbfade_pat = CustomMode(
-    mode=MODE_GRADUALLY,
-    speed=0.5,
-    colors=[
-        (0, 255, 0),
-        (0, 0, 255)
-    ]
-)
 
-sloworange_pat = CustomMode(
-    mode=MODE_GRADUALLY,
-    speed=0.5,
-    colors=[
-        (255, 35, 0),
-        (128, 16, 0)
-    ]
-)
+def add_checksum(values):
+    checksum = int(hex(sum(values) & 0xff), 16)
+    values.append(checksum)
+    return values
 
-slowpurple_pat = CustomMode(
-    mode=MODE_GRADUALLY,
-    speed=0.5,
-    colors=[
-        (255, 0, 255),
-        (128, 0, 72)
-    ]
-)
+
+def get_status(ip):
+    try:
+        data = bytearray(process_raw('81:8a:8b:96'))
+
+        s = socket.socket()
+        s.settimeout(5)
+        s.connect((ip, 5577))
+        s.send(data)
+        response = s.recvfrom(1024)
+        s.close()
+        response = [hex(s).replace('0x', '') for s in response[0]]
+        response = ['0'+s if len(s) == 1 else s for s in response]
+        return response
+    except:
+        print_error("Could not get the bulb's status")
+        return None
+
+
+def get_version(ip):
+    try:
+        data = bytearray(process_raw(
+            '48:46:2d:41:31:31:41:53:53:49:53:54:48:52:45:41:44'))  # HF-A11ASSISTHREAD
+        s = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+        s.sendto(data, (ip, 48899))
+        response = s.recvfrom(1024)
+        s.close()
+        msg = response[0].decode('utf-8')
+        version = msg.split(',')
+
+        return version[2]
+    except:
+        print_error("Could not get the bulb's version")
+        return None
+
+
+def send(ip, values):
+    try:
+        get_version(ip)
+
+        s = socket.socket()
+        s.connect((ip, 5577))
+        s.send(bytearray(add_checksum(values)))
+        s.close()
+
+        out = {"success": True}
+        print(json.dumps(out))
+        return
+    except:
+        print_error("Could not send the message to the bulb")
+
+
+def process_raw(raw):
+    print(raw)
+    raw = raw.split(':')
+    values = ['0x' + s for s in raw]
+    values = [int(v, 16) for v in values]
+    return values
+
+
+def process_rgb(rgb, version):
+    rgb = rgb.split(',')
+    if len(rgb) < 3:
+        print_error('Must have three color values (0-255) for R,G,B')
+
+    values = [int(v) for v in rgb]
+    values.insert(0, 49)  # add header
+
+    # this version has an extra zero in the body
+    if version == "AK001-ZJ2101":
+        values.extend([0])
+
+    values.extend([0, 240, 15])  # add tail
+    return values
+
+
+def process_power(power):
+    if power == 'on':
+        return process_raw('71:23:0f')
+    if power == 'off':
+        return process_raw('71:24:0f')
+
+
+def print_error(message):
+    out = {"success": False, "error": message}
+    print(json.dumps(out))
+    sys.exit()
 
 
 def seton():
-    light = magichue.Light('10.0.0.21')
     light.on = True
 
 
 def setoff():
-    light = magichue.Light('10.0.0.21')
     light.on = False
-
-# RGB basic colours
 
 
 def setred():
-    light = magichue.Light('10.0.0.21')
-    light.mode = magichue.NORMAL
+    light.is_white = False
     light.rgb = (255, 0, 0)
     light.brightness = 255
-
-
-def setblue():
-    light = magichue.Light('10.0.0.21')
-    light.mode = magichue.NORMAL
-    light.rgb = (0, 0, 255)
-    light.brightness = 255
+    light.is_white = False
+    print(light._get_status_data())
 
 
 def setgreen():
-    light = magichue.Light('10.0.0.21')
-    light.mode = magichue.NORMAL
+    light.is_white = False
     light.rgb = (0, 255, 0)
     light.brightness = 255
+    light.is_white = False
+    print(light._get_status_data())
 
-# Blends
+
+def setblue():
+    light.is_white = False
+    light.rgb = (0, 0, 255)
+    light.brightness = 255
+    light.is_white = False
+    print(light._get_status_data())
 
 
 def setorange():
-    light = magichue.Light('10.0.0.21')
-    light.mode = magichue.NORMAL
+    light.is_white = False
     light.rgb = (255, 35, 0)
     light.brightness = 255
+    light.is_white = False
+    print(light._get_status_data())
 
 
 def setcyan():
-    light = magichue.Light('10.0.0.21')
-    light.mode = magichue.NORMAL
+    light.is_white = False
     light.rgb = (0, 255, 255)
     light.brightness = 255
+    light.is_white = False
+    print(light._get_status_data())
 
 
 def setpurple():
-    light = magichue.Light('10.0.0.21')
-    light.mode = magichue.NORMAL
+    light.is_white = False
     light.rgb = (255, 0, 255)
     light.brightness = 255
+    light.is_white = False
+    print(light._get_status_data())
 
 
-def whstrobe():
-    light = magichue.Light('10.0.0.21')
-    revertm = light.mode
-    revertc = light.rgb
-
-    light.speed = 1
-    light.mode = magichue.WHITE_STROBE
-
-    time.sleep(3)
-    light.rgb = revertc
-    light.mode = revertm
-    light.brightness = 255
+def setwarm():
+    light.cw = 0
+    light.w = 255
+    light.is_white = True
+    print(light._get_status_data())
 
 
-def pustrobe():
-    light = magichue.Light('10.0.0.21')
-    revertm = light.mode
-    revertc = light.rgb
+def setcool():
+    cool = hex(int(255)).replace('0x', '')
+    print(cool)
+    values = process_raw('31:00:00:00:00:'+cool+':0f')
+    send(ip, values)
 
-    light.speed = 1
-    light.mode = magichue.PURPLE_STROBE
-
-    time.sleep(3)
-    light.rgb = revertc
-    light.mode = revertm
-    light.brightness = 255
+    # light.cw = 255
+    # light.w = 0
+    # light.is_white = True
+    # print(light._get_status_data())
 
 
-def slowpurple():
-    light = magichue.Light('10.0.0.21')
-    light.speed = 0.5
-    light.mode = slowpurple_pat
+def brightup():
+    currentval = light.brightness
+    light.brightness = currentval + 25
+    print(light._get_status_data())
 
 
-def sloworange():
-    light = magichue.Light('10.0.0.21')
-    light.speed = 0.5
-    light.mode = sloworange_pat
+def brightdown():
+    currentval = light.brightness
+    light.brightness = currentval - 25
+    print(light._get_status_data())
 
-def opfade():
-    light = magichue.Light('10.0.0.21')
-    light.speed = 0.5
-    light.mode = opfade_pat
-
-
-def gbfade():
-    light = magichue.Light('10.0.0.21')
-    light.speed = 0.5
-    light.mode = gbfade_pat
 
 # argparse for command line to trigger function
 
@@ -176,36 +221,27 @@ parser_blue.set_defaults(func=setblue)
 parser_orange = subparsers.add_parser('orange', help='set light to orange')
 parser_orange.set_defaults(func=setorange)
 
-parser_sloworange = subparsers.add_parser(
-    'sloworange', help='set light to slow pulse orange')
-parser_sloworange.set_defaults(func=sloworange)
-
 parser_cyan = subparsers.add_parser('cyan', help='set light to cyan')
 parser_cyan.set_defaults(func=setcyan)
 
 parser_purple = subparsers.add_parser('purple', help='set light to purple')
 parser_purple.set_defaults(func=setpurple)
 
-parser_slowpurple = subparsers.add_parser(
-    'slowpurple', help='set light to slow pulse purple')
-parser_slowpurple.set_defaults(func=slowpurple)
+parser_warm = subparsers.add_parser(
+    'warm', help='set light to warm white')
+parser_warm.set_defaults(func=setwarm)
 
-parser_whitestrobe = subparsers.add_parser(
-    'whitestrobe', help='set light to strobe white')
-parser_whitestrobe.set_defaults(func=whstrobe)
+parser_cool = subparsers.add_parser(
+    'cool', help='set light to cool white')
+parser_cool.set_defaults(func=setcool)
 
-parser_purplestrobe = subparsers.add_parser(
-    'purplestrobe', help='set light to strobe purple')
-parser_purplestrobe.set_defaults(func=pustrobe)
+parser_brightup = subparsers.add_parser(
+    'brightup', help='set brightness to +10%')
+parser_brightup.set_defaults(func=brightup)
 
-parser_gbfade = subparsers.add_parser(
-    'gbfade', help='set light to green and blue crossfade')
-parser_gbfade.set_defaults(func=gbfade)
-
-parser_opfade = subparsers.add_parser(
-    'opfade', help='set light to rainbow crossfade')
-parser_opfade.set_defaults(func=opfade)
-
+parser_brightdown = subparsers.add_parser(
+    'brightdown', help='set brightness to -10%')
+parser_brightdown.set_defaults(func=brightdown)
 
 if len(sys.argv) <= 1:
     sys.argv.append('--help')
