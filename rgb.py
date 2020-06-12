@@ -67,14 +67,14 @@ def send(ip, values):
         s.close()
 
         out = {"success": True}
-        print(json.dumps(out))
+        # print(json.dumps(out))
         return
     except:
         print_error("Could not send the message to the bulb")
 
 
 def process_raw(raw):
-    print(raw)
+    # print(raw)
     raw = raw.split(':')
     values = ['0x' + s for s in raw]
     values = [int(v, 16) for v in values]
@@ -106,7 +106,7 @@ def process_power(power):
 
 def print_error(message):
     out = {"success": False, "error": message}
-    print(json.dumps(out))
+    # print(json.dumps(out))
     sys.exit()
 
 
@@ -123,7 +123,7 @@ def setred():
     light.rgb = (255, 0, 0)
     light.brightness = 255
     light.is_white = False
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setgreen():
@@ -131,7 +131,7 @@ def setgreen():
     light.rgb = (0, 255, 0)
     light.brightness = 255
     light.is_white = False
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setblue():
@@ -139,7 +139,7 @@ def setblue():
     light.rgb = (0, 0, 255)
     light.brightness = 255
     light.is_white = False
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setorange():
@@ -147,7 +147,7 @@ def setorange():
     light.rgb = (255, 35, 0)
     light.brightness = 255
     light.is_white = False
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setcyan():
@@ -155,7 +155,7 @@ def setcyan():
     light.rgb = (0, 255, 255)
     light.brightness = 255
     light.is_white = False
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setpurple():
@@ -163,19 +163,19 @@ def setpurple():
     light.rgb = (255, 0, 255)
     light.brightness = 255
     light.is_white = False
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setwarm():
     light.cw = 0
     light.w = 255
     light.is_white = True
-    print(light._get_status_data())
+    # print(light._get_status_data())
 
 
 def setcool():
     cool = hex(int(255)).replace('0x', '')
-    print(cool)
+    # print(cool)
     values = process_raw('31:00:00:00:00:'+cool+':0f')
     send(ip, values)
 
@@ -188,13 +188,19 @@ def setcool():
 def brightup():
     currentval = light.brightness
     light.brightness = currentval + 25
-    print(light._get_status_data())
 
 
 def brightdown():
     currentval = light.brightness
     light.brightness = currentval - 25
-    print(light._get_status_data())
+
+
+def brightmax():
+    light.brightness = 255
+
+
+def brightmin():
+    light.brightness = 1
 
 
 # argparse for command line to trigger function
@@ -242,6 +248,14 @@ parser_brightup.set_defaults(func=brightup)
 parser_brightdown = subparsers.add_parser(
     'brightdown', help='set brightness to -10%')
 parser_brightdown.set_defaults(func=brightdown)
+
+parser_brightmax = subparsers.add_parser(
+    'brightmax', help='set brightness to 100%')
+parser_brightmax.set_defaults(func=brightmax)
+
+parser_brightmin = subparsers.add_parser(
+    'brightmin', help='set brightness to 100%')
+parser_brightmin.set_defaults(func=brightmin)
 
 if len(sys.argv) <= 1:
     sys.argv.append('--help')
