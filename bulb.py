@@ -1,27 +1,39 @@
-#!/usr/bin/python3
-
+import sys
+import time
+import argparse
+import magichue
 import sys
 import socket
 import json
-from argparse import ArgumentParser
+from magichue import discover_bulbs
+
+from magichue import (
+    CustomMode,
+    MODE_GRADUALLY,
+)
+
+light = magichue.Light('10.0.0.24')
+ip = '10.0.0.24'
+
 
 def add_checksum(values):
     checksum = int(hex(sum(values) & 0xff), 16)
     values.append(checksum)
     return values
 
+
 def get_status(ip):
-    try: 
+    try:
         data = bytearray(process_raw('81:8a:8b:96'))
-        
+
         s = socket.socket()
         s.settimeout(5)
-        s.connect((ip,5577))
+        s.connect((ip, 5577))
         s.send(data)
         response = s.recvfrom(1024)
         s.close()
         response = [hex(s).replace('0x', '') for s in response[0]]
-        response = [ '0'+s if len(s) == 1 else s for s in response]
+        response = ['0'+s if len(s) == 1 else s for s in response]
         return response
     except:
         print_error("Could not get the bulb's status")
@@ -29,19 +41,21 @@ def get_status(ip):
 
 
 def get_version(ip):
-    try: 
-        data = bytearray(process_raw('48:46:2d:41:31:31:41:53:53:49:53:54:48:52:45:41:44')) #HF-A11ASSISTHREAD
+    try:
+        data = bytearray(process_raw(
+            '48:46:2d:41:31:31:41:53:53:49:53:54:48:52:45:41:44'))  # HF-A11ASSISTHREAD
         s = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-        s.sendto(data, (ip,48899))
+        s.sendto(data, (ip, 48899))
         response = s.recvfrom(1024)
         s.close()
         msg = response[0].decode('utf-8')
         version = msg.split(',')
-        
+
         return version[2]
     except:
         print_error("Could not get the bulb's version")
         return None
+
 
 def send(ip, values):
     try:
@@ -51,33 +65,37 @@ def send(ip, values):
         s.connect((ip, 5577))
         s.send(bytearray(add_checksum(values)))
         s.close()
-        
-        out = {"success":True}
-        print(json.dumps(out))
+
+        out = {"success": True}
+        # print(json.dumps(out))
         return
     except:
         print_error("Could not send the message to the bulb")
 
+
 def process_raw(raw):
-    print(raw)
+    # print(raw)
     raw = raw.split(':')
     values = ['0x' + s for s in raw]
-    values = [int(v,16) for v in values]
+    values = [int(v, 16) for v in values]
     return values
+
 
 def process_rgb(rgb, version):
     rgb = rgb.split(',')
-    if len(rgb) < 3: print_error('Must have three color values (0-255) for R,G,B')
+    if len(rgb) < 3:
+        print_error('Must have three color values (0-255) for R,G,B')
 
     values = [int(v) for v in rgb]
-    values.insert(0,49) # add header
+    values.insert(0, 49)  # add header
 
     # this version has an extra zero in the body
     if version == "AK001-ZJ2101":
         values.extend([0])
 
-    values.extend([0,240,15]) # add tail
+    values.extend([0, 240, 15])  # add tail
     return values
+
 
 def process_power(power):
     if power == 'on':
@@ -85,67 +103,163 @@ def process_power(power):
     if power == 'off':
         return process_raw('71:24:0f')
 
+
 def print_error(message):
-    out = {"success":False, "error":message}
-    print(json.dumps(out))
+    out = {"success": False, "error": message}
+    # print(json.dumps(out))
     sys.exit()
 
-def Main(args):
-    parser = ArgumentParser()
-    parser.add_argument("-ip", help="provide the IP for the lightbulb; i.e. -ip 192.168.2.2")
-    parser.add_argument("-raw", help="accept colon separated raw hex string; i.e. -raw 71:23:0f")
-    parser.add_argument("-rgb", help="accept comma separated rgb values; i.e. -rgb 100,155,75")
-    parser.add_argument("-warm", help="accept value of warm white (0-255); i.e. -warm 150")
-    parser.add_argument("-cool", help="accept value of cool white (0-255); i.e. -cool 150")
-    parser.add_argument("-power", help="accept 'on' or 'off'; i.e. -power on")
-    parser.add_argument("-status", help="get the bulb's status", action='store_true')
-    parsed_args = parser.parse_args()
+
+def seton():
+    light.on = True
 
 
-    if parsed_args.ip is None:
-        print_error('Must provide IP.')
+def setoff():
+    light.on = False
 
-    if parsed_args.status is True:
-        status = get_status(parsed_args.ip)
-        
-        power = status[2]
-        power = 'on' if power == '23' else power
-        power = 'off' if power == '24' else power
-        
-        rgb = status[6:9]
-        for i,c in enumerate(rgb):
-            rgb[i] = int('0x'+c, 16)
-        
-        warm = int('0x'+status[9], 16)
-        out = {"power" : power, "rgb" : rgb, "warm" : warm}
-        print(json.dumps(out))
-        return
 
-    if parsed_args.raw is not None:
-        values = process_raw(parsed_args.raw)
+def setred():
+    light.is_white = False
+    light.rgb = (255, 0, 0)
+    light.brightness = 255
+    light.is_white = False
+    # print(light._get_status_data())
 
-    if parsed_args.rgb is not None:
-        version = get_version(parsed_args.ip)
-        if version is None: sys.exit()
-        values = process_rgb(parsed_args.rgb, version)
 
-    if parsed_args.warm is not None:
-        warm = hex(int(parsed_args.warm)).replace('0x','')
-        values = process_raw('31:00:00:00:'+warm+':0f:0f')
+def setgreen():
+    light.is_white = False
+    light.rgb = (0, 255, 0)
+    light.brightness = 255
+    light.is_white = False
+    # print(light._get_status_data())
 
-    if parsed_args.cool is not None:
-        cool = hex(int(parsed_args.cool)).replace('0x','')
-        print(cool)
-        values = process_raw('31:00:00:00:00:'+cool+':0f')
 
-    if parsed_args.power is not None:
-        values = process_power(parsed_args.power)
+def setblue():
+    light.is_white = False
+    light.rgb = (0, 0, 255)
+    light.brightness = 255
+    light.is_white = False
+    # print(light._get_status_data())
 
-    if 'values' in locals():
-        send(parsed_args.ip, values)
 
-    else:
-        print_error('Must provide raw hex or rgb values.')
+def setorange():
+    light.is_white = False
+    light.rgb = (255, 35, 0)
+    light.brightness = 255
+    light.is_white = False
+    # print(light._get_status_data())
 
-if __name__ == '__main__':
-    Main(sys.argv)
+
+def setcyan():
+    light.is_white = False
+    light.rgb = (0, 255, 255)
+    light.brightness = 255
+    light.is_white = False
+    # print(light._get_status_data())
+
+
+def setpurple():
+    light.is_white = False
+    light.rgb = (255, 0, 255)
+    light.brightness = 255
+    light.is_white = False
+    # print(light._get_status_data())
+
+
+def setwarm():
+    light.cw = 0
+    light.w = 255
+    light.is_white = True
+    # print(light._get_status_data())
+
+
+def setcool():
+    cool = hex(int(255)).replace('0x', '')
+    # print(cool)
+    values = process_raw('31:00:00:00:00:'+cool+':0f')
+    send(ip, values)
+
+    # light.cw = 255
+    # light.w = 0
+    # light.is_white = True
+    # print(light._get_status_data())
+
+
+def brightup():
+    currentval = light.brightness
+    light.brightness = currentval + 25
+
+
+def brightdown():
+    currentval = light.brightness
+    light.brightness = currentval - 25
+
+
+def brightmax():
+    light.brightness = 255
+
+
+def brightmin():
+    light.brightness = 1
+
+
+# argparse for command line to trigger function
+
+
+parser = argparse.ArgumentParser()
+subparsers = parser.add_subparsers()
+
+parser_on = subparsers.add_parser('on', help='set light to on')
+parser_on.set_defaults(func=seton)
+
+parser_off = subparsers.add_parser('off', help='set light to off')
+parser_off.set_defaults(func=setoff)
+
+parser_red = subparsers.add_parser('red', help='set light to red')
+parser_red.set_defaults(func=setred)
+
+parser_green = subparsers.add_parser('green', help='set light to green')
+parser_green.set_defaults(func=setgreen)
+
+parser_blue = subparsers.add_parser('blue', help='set light to blue')
+parser_blue.set_defaults(func=setblue)
+
+parser_orange = subparsers.add_parser('orange', help='set light to orange')
+parser_orange.set_defaults(func=setorange)
+
+parser_cyan = subparsers.add_parser('cyan', help='set light to cyan')
+parser_cyan.set_defaults(func=setcyan)
+
+parser_purple = subparsers.add_parser('purple', help='set light to purple')
+parser_purple.set_defaults(func=setpurple)
+
+parser_warm = subparsers.add_parser(
+    'warm', help='set light to warm white')
+parser_warm.set_defaults(func=setwarm)
+
+parser_cool = subparsers.add_parser(
+    'cool', help='set light to cool white')
+parser_cool.set_defaults(func=setcool)
+
+parser_brightup = subparsers.add_parser(
+    'brightup', help='set brightness to +10%')
+parser_brightup.set_defaults(func=brightup)
+
+parser_brightdown = subparsers.add_parser(
+    'brightdown', help='set brightness to -10%')
+parser_brightdown.set_defaults(func=brightdown)
+
+parser_brightmax = subparsers.add_parser(
+    'brightmax', help='set brightness to 100%')
+parser_brightmax.set_defaults(func=brightmax)
+
+parser_brightmin = subparsers.add_parser(
+    'brightmin', help='set brightness to 100%')
+parser_brightmin.set_defaults(func=brightmin)
+
+if len(sys.argv) <= 1:
+    sys.argv.append('--help')
+
+options = parser.parse_args()
+
+options.func()
